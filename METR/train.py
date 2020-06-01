@@ -8,11 +8,11 @@ import tensorflow as tf
 parser = argparse.ArgumentParser()
 parser.add_argument('--time_slot', type = int, default = 5,
                     help = 'a time step is 5 mins')
-parser.add_argument('--num_his', type = int, default = 12,
+parser.add_argument('--P', type = int, default = 12,
                     help = 'history steps')
-parser.add_argument('--num_pred', type = int, default = 12,
+parser.add_argument('--Q', type = int, default = 12,
                     help = 'prediction steps')
-parser.add_argument('--L', type = int, default = 1,
+parser.add_argument('--L', type = int, default = 5,
                     help = 'number of STAtt Blocks')
 parser.add_argument('--K', type = int, default = 8,
                     help = 'number of attention heads')
@@ -24,7 +24,7 @@ parser.add_argument('--val_ratio', type = float, default = 0.1,
                     help = 'validation set [default : 0.1]')
 parser.add_argument('--test_ratio', type = float, default = 0.2,
                     help = 'testing set [default : 0.2]')
-parser.add_argument('--batch_size', type = int, default = 32,
+parser.add_argument('--batch_size', type = int, default = 16,
                     help = 'batch size')
 parser.add_argument('--max_epoch', type = int, default = 1000,
                     help = 'epoch to run')
@@ -34,13 +34,13 @@ parser.add_argument('--learning_rate', type=float, default = 0.001,
                     help = 'initial learning rate')
 parser.add_argument('--decay_epoch', type=int, default = 5,
                     help = 'decay epoch')
-parser.add_argument('--traffic_file', default = '',
+parser.add_argument('--traffic_file', default = 'data/METR.h5',
                     help = 'traffic file')
-parser.add_argument('--SE_file', default = '',
+parser.add_argument('--SE_file', default = 'data/SE(METR).txt',
                     help = 'spatial emebdding file')
-parser.add_argument('--model_file', default = 'data/GMAN',
+parser.add_argument('--model_file', default = 'data/GMAN(METR)',
                     help = 'save the model to disk')
-parser.add_argument('--log_file', default = 'data/log',
+parser.add_argument('--log_file', default = 'data/log(METR)',
                     help = 'log file')
 args = parser.parse_args()
 
@@ -61,23 +61,22 @@ utils.log_string(log, 'data loaded!')
 # train model
 utils.log_string(log, 'compiling model...')
 T = 24 * 60 // args.time_slot
-num_train, _, num_vertex = trainX.shape
-X, TE, label, is_training = model.placeholder(
-    args.num_his, args.num_pred, num_vertex)
+num_train, _, N = trainX.shape
+X, TE, label, is_training = model.placeholder(args.P, args.Q, N)
 global_step = tf.Variable(0, trainable = False)
-bn_momentum = tf.train.exponential_decay(
+bn_momentum = tf.compat.v1.train.exponential_decay(
     0.5, global_step,
     decay_steps = args.decay_epoch * num_train // args.batch_size,
     decay_rate = 0.5, staircase = True)
 bn_decay = tf.minimum(0.99, 1 - bn_momentum)
 pred = model.GMAN(
-    X, TE, SE, args.num_his, args.num_pred, T, args.L, args.K, args.d,
+    X, TE, SE, args.P, args.Q, T, args.L, args.K, args.d,
     bn = True, bn_decay = bn_decay, is_training = is_training)
 pred = pred * std + mean
 loss = model.mae_loss(pred, label)
 tf.compat.v1.add_to_collection('pred', pred)
 tf.compat.v1.add_to_collection('loss', loss)
-learning_rate = tf.train.exponential_decay(
+learning_rate = tf.compat.v1.train.exponential_decay(
     args.learning_rate, global_step,
     decay_steps = args.decay_epoch * num_train // args.batch_size,
     decay_rate = 0.7, staircase = True)
@@ -216,13 +215,13 @@ utils.log_string(log, 'test             %.2f\t\t%.2f\t\t%.2f%%' %
                  (test_mae, test_rmse, test_mape * 100))
 utils.log_string(log, 'performance in each prediction step')
 MAE, RMSE, MAPE = [], [], []
-for step in range(args.num_pred):
-    mae, rmse, mape = utils.metric(testPred[:, step], testY[:, step])
+for q in range(args.Q):
+    mae, rmse, mape = utils.metric(testPred[:, q], testY[:, q])
     MAE.append(mae)
     RMSE.append(rmse)
     MAPE.append(mape)
     utils.log_string(log, 'step: %02d         %.2f\t\t%.2f\t\t%.2f%%' %
-                     (step + 1, mae, rmse, mape * 100))
+                     (q + 1, mae, rmse, mape * 100))
 average_mae = np.mean(MAE)
 average_rmse = np.mean(RMSE)
 average_mape = np.mean(MAPE)

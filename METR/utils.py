@@ -24,14 +24,14 @@ def metric(pred, label):
         mape = np.mean(mape)
     return mae, rmse, mape
 
-def seq2instance(data, num_his, num_pred):
+def seq2instance(data, P, Q):
     num_step, dims = data.shape
-    num_sample = num_step - num_his - num_pred + 1
-    x = np.zeros(shape = (num_sample, num_his, dims))
-    y = np.zeros(shape = (num_sample, num_pred, dims))
+    num_sample = num_step - P - Q + 1
+    x = np.zeros(shape = (num_sample, P, dims))
+    y = np.zeros(shape = (num_sample, Q, dims))
     for i in range(num_sample):
-        x[i] = data[i : i + num_his]
-        y[i] = data[i + num_his : i + num_his + num_pred]
+        x[i] = data[i : i + P]
+        y[i] = data[i + P : i + P + Q]
     return x, y
 
 def loadData(args):
@@ -47,9 +47,9 @@ def loadData(args):
     val = Traffic[train_steps : train_steps + val_steps]
     test = Traffic[-test_steps :]
     # X, Y 
-    trainX, trainY = seq2instance(train, args.num_his, args.num_pred)
-    valX, valY = seq2instance(val, args.num_his, args.num_pred)
-    testX, testY = seq2instance(test, args.num_his, args.num_pred)
+    trainX, trainY = seq2instance(train, args.P, args.Q)
+    valX, valY = seq2instance(val, args.P, args.Q)
+    testX, testY = seq2instance(test, args.P, args.Q)
     # normalization
     mean, std = np.mean(trainX), np.std(trainX)
     trainX = (trainX - mean) / std
@@ -60,8 +60,8 @@ def loadData(args):
     f = open(args.SE_file, mode = 'r')
     lines = f.readlines()
     temp = lines[0].split(' ')
-    num_vertex, dims = int(temp[0]), int(temp[1])
-    SE = np.zeros(shape = (num_vertex, dims), dtype = np.float32)
+    N, dims = int(temp[0]), int(temp[1])
+    SE = np.zeros(shape = (N, dims), dtype = np.float32)
     for line in lines[1 :]:
         temp = line.split(' ')
         index = int(temp[0])
@@ -78,12 +78,12 @@ def loadData(args):
     train = Time[: train_steps]
     val = Time[train_steps : train_steps + val_steps]
     test = Time[-test_steps :]
-    # shape = (num_sample, num_his + num_pred, 2)
-    trainTE = seq2instance(train, args.num_his, args.num_pred)
+    # shape = (num_sample, P + Q, 2)
+    trainTE = seq2instance(train, args.P, args.Q)
     trainTE = np.concatenate(trainTE, axis = 1).astype(np.int32)
-    valTE = seq2instance(val, args.num_his, args.num_pred)
+    valTE = seq2instance(val, args.P, args.Q)
     valTE = np.concatenate(valTE, axis = 1).astype(np.int32)
-    testTE = seq2instance(test, args.num_his, args.num_pred)
+    testTE = seq2instance(test, args.P, args.Q)
     testTE = np.concatenate(testTE, axis = 1).astype(np.int32)
     
     return (trainX, trainTE, trainY, valX, valTE, valY, testX, testTE, testY,
